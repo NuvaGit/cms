@@ -231,9 +231,13 @@ export default function AdminPage() {
               >
                 Initialize/Update Meetings
               </button>
-              <p className="text-sm text-gray-300 mt-2">
-                Creates Thursday 7pm & Saturday 1pm meetings since 2019
-              </p>
+              <div className="text-sm text-gray-300 mt-2 space-y-1">
+                <p>Creates Thursday 7pm & Saturday 1pm meetings since 2019</p>
+                <p className="text-xs">🇮🇪 Automatically excludes Irish public holidays:</p>
+                <p className="text-xs">• New Year's Day, St. Patrick's Day, Easter Monday</p>
+                <p className="text-xs">• May/June/August/October Bank Holidays</p>
+                <p className="text-xs">• Christmas Day, St. Stephen's Day</p>
+              </div>
             </div>
           </div>
 
