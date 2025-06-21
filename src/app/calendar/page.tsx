@@ -2,124 +2,172 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Meeting } from '@/types';
 
-export default function CalendarPage() {
-  const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
-  const [previousMeetings, setPreviousMeetings] = useState<Meeting[]>([]);
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-  const [notes, setNotes] = useState('');
+interface User {
+  _id: string;
+  email: string;
+  name: string;
+  role?: string;
+}
+
+interface Config {
+  defaultZoomLink: string;
+}
+
+export default function AdminPage() {
+  const [config, setConfig] = useState<Config>({ defaultZoomLink: '' });
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showPrevious, setShowPrevious] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [newZoomLink, setNewZoomLink] = useState('');
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: '',
+    password: '',
+    name: '',
+    role: 'user'
+  });
+  const [adminCheckComplete, setAdminCheckComplete] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    console.log('🏠 Calendar page mounted');
-    fetchUpcomingMeetings();
-    checkAdminStatus();
+    checkAdminPermissions();
   }, []);
 
-  const checkAdminStatus = async () => {
+  const checkAdminPermissions = async () => {
     try {
+      console.log('🔍 Checking admin permissions...');
       const response = await fetch('/api/config');
-      setIsAdmin(response.status !== 403);
-    } catch (error) {
-      setIsAdmin(false);
-    }
-  };
-
-  const fetchUpcomingMeetings = async () => {
-    try {
-      console.log('📅 Fetching upcoming meetings...');
-      const response = await fetch('/api/meetings?filter=upcoming');
-      console.log('📡 Meetings response status:', response.status);
+      console.log('🔍 Admin permission check response:', response.status);
       
-      if (response.status === 401) {
-        console.log('🔒 Unauthorized - redirecting to login');
+      if (response.status === 403) {
+        console.log('❌ Not admin - redirecting to calendar');
+        alert('Admin access required');
+        router.push('/calendar');
+        return;
+      } else if (response.status === 401) {
+        console.log('❌ Not authenticated - redirecting to login');
         router.push('/login');
         return;
-      }
-      
-      if (response.ok) {
+      } else if (response.ok) {
+        console.log('✅ Admin access confirmed');
         const data = await response.json();
-        console.log('📅 Upcoming meetings loaded:', data.length);
-        setUpcomingMeetings(data);
+        setConfig(data);
+        setNewZoomLink(data.defaultZoomLink);
+        setAdminCheckComplete(true);
+        fetchUsers();
       } else {
-        console.log('❌ Failed to fetch upcoming meetings');
+        console.log('❌ Unexpected response:', response.status);
+        alert('Error checking admin permissions');
+        router.push('/calendar');
+        return;
       }
     } catch (error) {
-      console.error('💥 Error fetching meetings:', error);
+      console.error('💥 Error checking admin permissions:', error);
+      alert('Error checking admin permissions');
+      router.push('/calendar');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPreviousMeetings = async () => {
-    if (previousMeetings.length > 0) return; // Already loaded
-    
+  const fetchUsers = async () => {
     try {
-      console.log('📅 Fetching previous meetings...');
-      const response = await fetch('/api/meetings?filter=previous');
-      
+      const response = await fetch('/api/users');
       if (response.ok) {
         const data = await response.json();
-        console.log('📅 Previous meetings loaded:', data.length);
-        setPreviousMeetings(data);
+        setUsers(data);
       } else {
-        console.log('❌ Failed to fetch previous meetings');
+        console.error('Failed to fetch users:', response.status);
       }
     } catch (error) {
-      console.error('💥 Error fetching previous meetings:', error);
+      console.error('Error fetching users:', error);
     }
   };
 
-  const handleShowPrevious = () => {
-    setShowPrevious(!showPrevious);
-    if (!showPrevious) {
-      fetchPreviousMeetings();
-    }
-  };
-
-  const handleMeetingSelect = (meeting: Meeting) => {
-    setSelectedMeeting(meeting);
-    setNotes(meeting.notes || '');
-  };
-
-  const handleSaveNotes = async () => {
-    if (!selectedMeeting) return;
-    
+  const handleSaveConfig = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`/api/meetings/${selectedMeeting._id}`, {
+      const response = await fetch('/api/config', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ defaultZoomLink: newZoomLink }),
       });
 
       if (response.ok) {
-        // Update local state
-        const updateMeeting = (meetings: Meeting[]) => 
-          meetings.map(m => 
-            m._id === selectedMeeting._id 
-              ? { ...m, notes }
-              : m
-          );
-        
-        setUpcomingMeetings(updateMeeting);
-        setPreviousMeetings(updateMeeting);
-        setSelectedMeeting({ ...selectedMeeting, notes });
-        alert('Notes saved successfully!');
+        setConfig({ defaultZoomLink: newZoomLink });
+        alert('Configuration saved successfully!');
       } else {
-        alert('Failed to save notes');
+        alert('Failed to save configuration');
       }
     } catch (error) {
-      alert('Error saving notes');
+      alert('Error saving configuration');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newUser),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUsers([...users, data.user]);
+        setNewUser({ email: '', password: '', name: '', role: 'user' });
+        setShowCreateUser(false);
+        alert('User created successfully!');
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to create user');
+      }
+    } catch (error) {
+      alert('Error creating user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userEmail: string) => {
+    if (!confirm(`Are you sure you want to delete user ${userEmail}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (response.ok) {
+        setUsers(users.filter(u => u._id !== userId));
+        alert('User deleted successfully');
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to delete user');
+      }
+    } catch (error) {
+      alert('Error deleting user');
+    }
+  };
+
+  const handleBackfill = async () => {
+    try {
+      const response = await fetch('/api/backfill', { method: 'POST' });
+      const data = await response.json();
+      alert(data.message);
+    } catch (error) {
+      alert('Failed to initialize meetings');
     }
   };
 
@@ -128,70 +176,30 @@ export default function CalendarPage() {
     router.push('/login');
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatTime = (timeString: string) => {
-    if (!timeString) return '1:00 PM';
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
-  };
-
-  const isUpcoming = (dateString: string, timeString: string) => {
-    const now = new Date();
-    const meetingDate = new Date(dateString);
-    const [hours, minutes] = (timeString || '13:00').split(':');
-    meetingDate.setHours(parseInt(hours), parseInt(minutes));
-    return meetingDate > now;
-  };
-
-  const getNextMeeting = () => {
-    return upcomingMeetings.find(meeting => 
-      isUpcoming(meeting.date, meeting.time)
-    );
-  };
-
-  const getDayOfWeek = (dateString: string) => {
-    const day = new Date(dateString).getDay();
-    return day === 4 ? 'Thursday' : day === 6 ? 'Saturday' : '';
-  };
-
-  if (loading) {
+  if (loading || !adminCheckComplete) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
-        <div className="text-xl text-white">Loading meetings...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="text-xl text-white">
+          {loading ? 'Checking admin permissions...' : 'Loading admin panel...'}
+        </div>
       </div>
     );
   }
 
-  const nextMeeting = getNextMeeting();
-  const displayMeetings = showPrevious ? previousMeetings : upcomingMeetings;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
       <header className="bg-white/10 backdrop-blur-md border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <h1 className="text-3xl font-bold text-white">Calendar CMS</h1>
+            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
             <div className="flex space-x-4">
-              {isAdmin && (
-                <button
-                  onClick={() => router.push('/admin')}
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  Admin Panel
-                </button>
-              )}
+              <button
+                onClick={() => router.push('/calendar')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                Back to Calendar
+              </button>
               <button
                 onClick={handleLogout}
                 className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -204,177 +212,141 @@ export default function CalendarPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Next Meeting Banner */}
-        {nextMeeting && (
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl p-6 mb-8 shadow-xl border border-white/20 backdrop-blur-sm">
-            <h2 className="text-xl font-semibold mb-3">🔥 Next Meeting</h2>
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Configuration Settings */}
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 shadow-xl">
+            <h2 className="text-xl font-semibold mb-6 text-white">Meeting Configuration</h2>
+            
+            <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium">{nextMeeting.title}</h3>
-                <p className="text-emerald-100">
-                  {getDayOfWeek(nextMeeting.date)} • {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
+                <label htmlFor="zoomLink" className="block text-sm font-medium text-gray-200 mb-2">
+                  Default Zoom Link
+                </label>
+                <input
+                  id="zoomLink"
+                  type="url"
+                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-300"
+                  placeholder="https://zoom.us/j/1234567890"
+                  value={newZoomLink}
+                  onChange={(e) => setNewZoomLink(e.target.value)}
+                />
+                <p className="text-sm text-gray-300 mt-2">
+                  This link will be used for all future meetings
                 </p>
               </div>
-              <a
-                href={nextMeeting.zoomLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-white text-emerald-600 px-6 py-3 rounded-lg text-sm font-medium hover:bg-gray-100 transition-all duration-200 shadow-lg hover:shadow-xl text-center"
-              >
-                🎥 Join Zoom Meeting
-              </a>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Meetings List */}
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-white">
-                {showPrevious ? '📅 Previous Meetings' : '🗓️ Upcoming Meetings'} ({displayMeetings.length})
-              </h2>
+              
               <button
-                onClick={handleShowPrevious}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl ${
-                  showPrevious 
-                    ? 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white' 
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
-                }`}
+                onClick={handleSaveConfig}
+                disabled={saving}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                {showPrevious ? 'Show Upcoming' : 'Show Previous'}
+                {saving ? 'Saving...' : 'Save Configuration'}
               </button>
             </div>
-            
-            {displayMeetings.length === 0 ? (
-              <div className="text-center py-12 text-gray-300">
-                <div className="text-4xl mb-4">📭</div>
-                <p className="text-lg font-medium">No {showPrevious ? 'previous' : 'upcoming'} meetings found.</p>
-                {isAdmin && !showPrevious && (
-                  <button
-                    onClick={() => router.push('/admin')}
-                    className="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                  >
-                    Initialize Meetings in Admin Panel
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar">
-                {displayMeetings.map((meeting) => (
-                  <div
-                    key={meeting._id}
-                    onClick={() => handleMeetingSelect(meeting)}
-                    className={`p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
-                      selectedMeeting?._id === meeting._id
-                        ? 'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400 shadow-lg'
-                        : 'bg-white/10 border border-white/20 hover:bg-white/20'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-white mb-1">{meeting.title}</h4>
-                        <p className="text-sm text-gray-300 mb-2">
-                          {getDayOfWeek(meeting.date)} • {formatDate(meeting.date)} at {formatTime(meeting.time)}
-                        </p>
-                        {meeting.zoomLink && (
-                          <a
-                            href={meeting.zoomLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors duration-200"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            🎥 Join Zoom →
-                          </a>
-                        )}
-                      </div>
-                      <div className="text-right ml-4">
-                        <span className={`inline-block w-3 h-3 rounded-full shadow-sm ${
-                          meeting.notes ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-gray-400'
-                        }`} title={meeting.notes ? 'Has notes' : 'No notes'}></span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+
+            <div className="mt-8">
+              <h3 className="text-lg font-medium mb-4 text-white">System Actions</h3>
+              <button
+                onClick={handleBackfill}
+                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                Initialize/Update Meetings
+              </button>
+              <p className="text-sm text-gray-300 mt-2">
+                Creates Thursday 7pm & Saturday 1pm meetings since 2019
+              </p>
+            </div>
           </div>
 
-          {/* Notes Editor */}
+          {/* User Management */}
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 shadow-xl">
-            <h2 className="text-xl font-semibold mb-6 text-white">📝 Meeting Notes</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">User Management ({users.length})</h2>
+              <button
+                onClick={() => setShowCreateUser(!showCreateUser)}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                {showCreateUser ? 'Cancel' : 'Add User'}
+              </button>
+            </div>
+
+            {/* Create User Form */}
+            {showCreateUser && (
+              <form onSubmit={handleCreateUser} className="mb-6 p-4 bg-white/10 rounded-lg border border-white/20">
+                <h3 className="text-lg font-medium text-white mb-4">Create New User</h3>
+                <div className="space-y-4">
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-300"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-300"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-300"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                    required
+                  />
+                  <select
+                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                  >
+                    <option value="user" className="text-gray-900">User</option>
+                    <option value="admin" className="text-gray-900">Admin</option>
+                  </select>
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                  >
+                    Create User
+                  </button>
+                </div>
+              </form>
+            )}
             
-            {selectedMeeting ? (
-              <div>
-                <div className="mb-6 p-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg border border-white/20">
-                  <h3 className="font-medium text-white mb-1">{selectedMeeting.title}</h3>
-                  <p className="text-sm text-gray-300 mb-2">
-                    {getDayOfWeek(selectedMeeting.date)} • {formatDate(selectedMeeting.date)} at {formatTime(selectedMeeting.time)}
-                  </p>
-                  {selectedMeeting.zoomLink && (
-                    <a
-                      href={selectedMeeting.zoomLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors duration-200"
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {users.map((user) => (
+                <div
+                  key={user._id}
+                  className="flex justify-between items-center p-4 bg-white/10 border border-white/20 rounded-lg backdrop-blur-sm"
+                >
+                  <div>
+                    <h4 className="font-medium text-white">{user.name}</h4>
+                    <p className="text-sm text-gray-300">{user.email}</p>
+                    {user.role === 'admin' && (
+                      <span className="inline-block bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs px-2 py-1 rounded-full mt-1">
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  
+                  {user.email !== 'jackneilan02@gmail.com' && user.email !== 'admin@company.com' && (
+                    <button
+                      onClick={() => handleDeleteUser(user._id, user.email)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm transition-all duration-200"
                     >
-                      🎥 Join Zoom Meeting →
-                    </a>
+                      Delete
+                    </button>
                   )}
                 </div>
-                
-                <div className="mb-6">
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-200 mb-3">
-                    Notes
-                  </label>
-                  <textarea
-                    id="notes"
-                    rows={12}
-                    className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-300 resize-none"
-                    placeholder="Add your meeting notes here..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </div>
-                
-                <button
-                  onClick={handleSaveNotes}
-                  disabled={saving}
-                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-4 py-3 rounded-lg text-sm font-medium disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  {saving ? '💾 Saving...' : '💾 Save Notes'}
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-300">
-                <div className="text-4xl mb-4">👆</div>
-                <p className="text-lg">Select a meeting to view or edit notes</p>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 3px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
-          border-radius: 3px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5);
-        }
-      `}</style>
     </div>
   );
 }

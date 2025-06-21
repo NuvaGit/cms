@@ -20,7 +20,11 @@ async function isAdmin(userId: string) {
     const db = client.db('calendarcms');
     const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
     console.log('🔍 Admin check - User found:', user?.email, 'Role:', user?.role);
-    return user?.role === 'admin' || user?.email === 'jackneilan02@gmail.com';
+    
+    // Check if user has admin role OR is the original admin email
+    const isUserAdmin = user?.role === 'admin' || user?.email === 'admin@company.com' || user?.email === 'jackneilan02@gmail.com';
+    console.log('🔍 Final admin status:', isUserAdmin);
+    return isUserAdmin;
   } catch (error) {
     console.error('❌ Admin check error:', error);
     return false;
@@ -30,10 +34,18 @@ async function isAdmin(userId: string) {
 export async function GET(request: NextRequest) {
   try {
     const user = await verifyAuth(request);
-    if (!user || !(await isAdmin(user.userId))) {
+    if (!user) {
+      console.log('❌ No user found, returning 401');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const adminStatus = await isAdmin(user.userId);
+    if (!adminStatus) {
+      console.log('❌ User is not admin, returning 403');
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
+    console.log('✅ Admin access granted');
     const client = await clientPromise;
     const db = client.db('calendarcms');
     
@@ -48,6 +60,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(config);
   } catch (error) {
+    console.error('❌ Config GET error:', error);
     return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 });
   }
 }
