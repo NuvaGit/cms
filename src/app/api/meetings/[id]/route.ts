@@ -19,19 +19,19 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { notes } = await request.json();
+    const { notes, time, zoomLink } = await request.json();
     
     const client = await clientPromise;
     const db = client.db('calendarcms');
     
+    const updateFields: any = { updatedAt: new Date() };
+    if (notes !== undefined) updateFields.notes = notes;
+    if (time !== undefined) updateFields.time = time;
+    if (zoomLink !== undefined) updateFields.zoomLink = zoomLink;
+    
     const result = await db.collection('meetings').updateOne(
       { _id: new ObjectId(params.id) },
-      { 
-        $set: { 
-          notes,
-          updatedAt: new Date()
-        }
-      }
+      { $set: updateFields }
     );
     
     if (result.matchedCount === 0) {

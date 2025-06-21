@@ -14,11 +14,12 @@ export async function POST() {
     }
     
     // Create 4 hardcoded users
+  // Create 4 hardcoded users
     const users = [
-      { email: 'admin@company.com', password: await hashPassword('admin123'), name: 'Admin User' },
-      { email: 'john@company.com', password: await hashPassword('john123'), name: 'John Doe' },
-      { email: 'jane@company.com', password: await hashPassword('jane123'), name: 'Jane Smith' },
-      { email: 'bob@company.com', password: await hashPassword('bob123'), name: 'Bob Wilson' }
+      { email: 'admin@company.com', password: await hashPassword('admin123'), name: 'Admin User', role: 'admin' },
+      { email: 'john@company.com', password: await hashPassword('john123'), name: 'John Doe', role: 'user' },
+      { email: 'jane@company.com', password: await hashPassword('jane123'), name: 'Jane Smith', role: 'user' },
+      { email: 'bob@company.com', password: await hashPassword('bob123'), name: 'Bob Wilson', role: 'user' }
     ];
     
     await db.collection('users').insertMany(users);
