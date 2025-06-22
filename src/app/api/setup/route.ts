@@ -10,22 +10,31 @@ export async function POST() {
     // Check if users already exist
     const existingUsers = await db.collection('users').countDocuments();
     if (existingUsers > 0) {
-      return NextResponse.json({ message: 'Users already exist' });
+      return NextResponse.json({ 
+        message: 'System already initialized - users exist',
+        existingUsers 
+      });
     }
     
-    // Create 4 hardcoded users
-  // Create 4 hardcoded users
-    const users = [
-      { email: 'admin@company.com', password: await hashPassword('admin123'), name: 'Admin User', role: 'admin' },
-      { email: 'john@company.com', password: await hashPassword('john123'), name: 'John Doe', role: 'user' },
-      { email: 'jane@company.com', password: await hashPassword('jane123'), name: 'Jane Smith', role: 'user' },
-      { email: 'bob@company.com', password: await hashPassword('bob123'), name: 'Bob Wilson', role: 'user' }
-    ];
+    // Create only one initial admin user
+    const initialAdmin = {
+      email: 'admin@calendarcms.com',
+      password: await hashPassword('admin123'),
+      name: 'System Administrator',
+      role: 'admin',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     
-    await db.collection('users').insertMany(users);
+    await db.collection('users').insertOne(initialAdmin);
     
-    return NextResponse.json({ message: 'Setup complete - users created' });
+    return NextResponse.json({ 
+      message: 'System initialized successfully!',
+      adminEmail: 'admin@calendarcms.com',
+      note: 'Use the admin interface to create additional users'
+    });
   } catch (error) {
+    console.error('Setup error:', error);
     return NextResponse.json({ error: 'Setup failed' }, { status: 500 });
   }
 }

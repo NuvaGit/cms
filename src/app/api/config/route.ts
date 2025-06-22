@@ -18,11 +18,28 @@ async function isAdmin(userId: string) {
   try {
     const client = await clientPromise;
     const db = client.db('calendarcms');
-    const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+    
+    console.log('🔍 Looking up user with ID:', userId);
+    
+    // Try to create ObjectId and handle invalid format
+    let objectId;
+    try {
+      objectId = new ObjectId(userId);
+    } catch (err) {
+      console.error('❌ Invalid ObjectId format:', userId);
+      return false;
+    }
+    
+    const user = await db.collection('users').findOne({ _id: objectId });
     console.log('🔍 Admin check - User found:', user?.email, 'Role:', user?.role);
     
-    // Check if user has admin role OR is the original admin email
-    const isUserAdmin = user?.role === 'admin' || user?.email === 'admin@company.com' || user?.email === 'jackneilan02@gmail.com';
+    if (!user) {
+      console.log('❌ No user found with ID:', userId);
+      return false;
+    }
+    
+    // Check only role-based admin access
+    const isUserAdmin = user?.role === 'admin';
     console.log('🔍 Final admin status:', isUserAdmin);
     return isUserAdmin;
   } catch (error) {

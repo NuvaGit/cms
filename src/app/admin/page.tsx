@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [newZoomLink, setNewZoomLink] = useState('');
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -58,6 +59,11 @@ export default function AdminPage() {
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
+        
+        // Find current user from the list (you could also fetch this separately)
+        // For now, we'll use the first admin as a fallback
+        const adminUser = data.find((u: User) => u.role === 'admin');
+        setCurrentUser(adminUser);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -316,14 +322,12 @@ export default function AdminPage() {
                     )}
                   </div>
                   
-                  {user.email !== 'jackneilan02@gmail.com' && (
-                    <button
-                      onClick={() => handleDeleteUser(user._id, user.email)}
-                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm transition-all duration-200"
-                    >
-                      Delete
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleDeleteUser(user._id, user.email)}
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm transition-all duration-200"
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>

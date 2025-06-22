@@ -18,16 +18,44 @@ async function isAdmin(userId: string) {
   try {
     const client = await clientPromise;
     const db = client.db('calendarcms');
-    const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+    
+    console.log('🔍 Looking up user with ID:', userId);
+    
+    // Try to create ObjectId and handle invalid format
+    let objectId;
+    try {
+      objectId = new ObjectId(userId);
+    } catch (err) {
+      console.error('❌ Invalid ObjectId format:', userId);
+      return false;
+    }
+    
+    const user = await db.collection('users').findOne({ _id: objectId });
     console.log('🔍 Admin check - User found:', user?.email, 'Role:', user?.role);
     
-    // Check if user has admin role OR is the original admin email
-    const isUserAdmin = user?.role === 'admin' || user?.email === 'admin@company.com' || user?.email === 'jackneilan02@gmail.com';
+    if (!user) {
+      console.log('❌ No user found with ID:', userId);
+      return false;
+    }
+    
+    // Check only role-based admin access
+    const isUserAdmin = user?.role === 'admin';
     console.log('🔍 Final admin status:', isUserAdmin);
     return isUserAdmin;
   } catch (error) {
     console.error('❌ Admin check error:', error);
     return false;
+  }
+}
+
+async function getCurrentUser(userId: string) {
+  try {
+    const client = await clientPromise;
+    const db = client.db('calendarcms');
+    return await db.collection('users').findOne({ _id: new ObjectId(userId) });
+  } catch (error) {
+    console.error('❌ Error fetching current user:', error);
+    return null;
   }
 }
 
@@ -116,10 +144,27 @@ export async function DELETE(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db('calendarcms');
     
-    // Prevent deleting protected admin users
+    // Get the target user and current user info
     const targetUser = await db.collection('users').findOne({ _id: new ObjectId(userId) });
-    if (targetUser?.email === 'jackneilan02@gmail.com' || targetUser?.email === 'admin@company.com') {
-      return NextResponse.json({ error: 'Cannot delete protected admin user' }, { status: 400 });
+    const currentUser = await getCurrentUser(user.userId);
+    
+    if (!targetUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    
+    // Prevent deleting yourself
+    if (targetUser._id.toString() === user.userId) {
+      return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 });
+    }
+    
+    // Check if this would delete the last admin
+    if (targetUser.role === 'admin') {
+      const adminCount = await db.collection('users').countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return NextResponse.json({ 
+          error: 'Cannot delete the last admin user. Create another admin first.' 
+        }, { status: 400 });
+      }
     }
     
     const result = await db.collection('users').deleteOne({ _id: new ObjectId(userId) });
@@ -130,6 +175,7 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({ message: 'User deleted successfully' });
   } catch (error) {
+    console.error('Delete user error:', error);
     return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
   }
 }

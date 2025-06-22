@@ -56,7 +56,7 @@ export default function LoginPage() {
             Calendar CMS Login
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Test users: admin@company.com (admin123), john@company.com (john123)
+            Enter your credentials to access the calendar system
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -101,6 +101,12 @@ export default function LoginPage() {
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
+          </div>
+          
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Need to set up the system? <a href="/setup" className="text-indigo-600 hover:text-indigo-500">Initialize here</a>
+            </p>
           </div>
         </form>
       </div>
