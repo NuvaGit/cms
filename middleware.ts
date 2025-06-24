@@ -49,7 +49,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
-  // All other routes require authentication
+  // All other routes require authentication (including /admin and /calendar)
   console.log('🔒 Protected route, checking authentication...');
   
   // Check for auth token
@@ -84,9 +84,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public (public assets)
      */
     '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
-    '/admin/:path*',
-    '/calendar/:path*'
   ],
 };

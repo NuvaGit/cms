@@ -31,32 +31,58 @@ export default function AdminPage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetchConfig();
-    fetchUsers();
+    // Check authentication first, then load data
+    checkAuthAndLoadData();
   }, []);
 
-  const fetchConfig = async () => {
+  const checkAuthAndLoadData = async () => {
     try {
+      // First check if user is authenticated by trying to fetch config
       const response = await fetch('/api/config');
-      if (response.status === 403) {
+      
+      if (response.status === 401) {
+        // User is not authenticated, redirect to login
+        console.log('❌ User not authenticated, redirecting to login');
+        router.push('/login');
+        return;
+      } else if (response.status === 403) {
+        // User is authenticated but not admin, redirect to calendar
+        console.log('❌ User not admin, redirecting to calendar');
         alert('Admin access required');
         router.push('/calendar');
         return;
-      }
-      if (response.ok) {
-        const data = await response.json();
-        setConfig(data);
-        setNewZoomLink(data.defaultZoomLink);
+      } else if (response.ok) {
+        // User is authenticated and is admin, load the data
+        const configData = await response.json();
+        setConfig(configData);
+        setNewZoomLink(configData.defaultZoomLink);
+        
+        // Now fetch users
+        await fetchUsers();
+      } else {
+        // Some other error
+        console.error('❌ Config fetch error:', response.status);
+        alert('Error loading admin panel');
+        router.push('/calendar');
+        return;
       }
     } catch (error) {
-      console.error('Error fetching config:', error);
+      console.error('❌ Error checking auth:', error);
+      // On network error, assume not authenticated
+      router.push('/login');
+      return;
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchUsers = async () => {
     try {
       const response = await fetch('/api/users');
-      if (response.ok) {
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      } else if (response.ok) {
         const data = await response.json();
         setUsers(data);
         
@@ -67,8 +93,6 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -83,7 +107,10 @@ export default function AdminPage() {
         body: JSON.stringify({ defaultZoomLink: newZoomLink }),
       });
 
-      if (response.ok) {
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      } else if (response.ok) {
         setConfig({ defaultZoomLink: newZoomLink });
         alert('Configuration saved successfully!');
       } else {
@@ -107,7 +134,10 @@ export default function AdminPage() {
         body: JSON.stringify(newUser),
       });
 
-      if (response.ok) {
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      } else if (response.ok) {
         const data = await response.json();
         setUsers([...users, data.user]);
         setNewUser({ email: '', password: '', name: '', role: 'user' });
@@ -136,7 +166,10 @@ export default function AdminPage() {
         body: JSON.stringify({ userId }),
       });
 
-      if (response.ok) {
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      } else if (response.ok) {
         setUsers(users.filter(u => u._id !== userId));
         alert('User deleted successfully');
       } else {
@@ -151,6 +184,10 @@ export default function AdminPage() {
   const handleBackfill = async () => {
     try {
       const response = await fetch('/api/backfill', { method: 'POST' });
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       const data = await response.json();
       alert(data.message);
     } catch (error) {
