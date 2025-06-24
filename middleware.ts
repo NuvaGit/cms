@@ -10,7 +10,6 @@ export function middleware(request: NextRequest) {
   // Public routes that don't need authentication
   const publicRoutes = [
     '/login',
-    '/setup',
     '/', // Home page
   ];
   
@@ -18,11 +17,9 @@ export function middleware(request: NextRequest) {
   const publicApiRoutes = [
     '/api/auth/login',
     '/api/auth/logout', 
-    '/api/setup',
     '/api/debug-users',
     '/api/debug-auth',
-    '/api/generate-hash',
-    '/api/force-setup'
+    '/api/generate-hash'
   ];
   
   // Static files and Next.js internal routes
