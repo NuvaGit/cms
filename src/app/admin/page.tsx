@@ -12,14 +12,30 @@ interface User {
 
 interface Config {
   defaultZoomLink: string;
+  meetingDay1?: number;
+  meetingDay2?: number;
+  meetingTime1?: string;
+  meetingTime2?: string;
 }
 
 export default function AdminPage() {
-  const [config, setConfig] = useState<Config>({ defaultZoomLink: '' });
+  const [config, setConfig] = useState<Config>({ 
+    defaultZoomLink: '',
+    meetingDay1: 4, // Thursday
+    meetingDay2: 6, // Saturday  
+    meetingTime1: '19:00',
+    meetingTime2: '13:00'
+  });
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newZoomLink, setNewZoomLink] = useState('');
+  const [meetingConfig, setMeetingConfig] = useState({
+    meetingDay1: 4,
+    meetingDay2: 6,
+    meetingTime1: '19:00',
+    meetingTime2: '13:00'
+  });
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
@@ -56,6 +72,12 @@ export default function AdminPage() {
         const configData = await response.json();
         setConfig(configData);
         setNewZoomLink(configData.defaultZoomLink);
+        setMeetingConfig({
+          meetingDay1: configData.meetingDay1 || 4,
+          meetingDay2: configData.meetingDay2 || 6,
+          meetingTime1: configData.meetingTime1 || '19:00',
+          meetingTime2: configData.meetingTime2 || '13:00'
+        });
         
         // Now fetch users
         await fetchUsers();
@@ -104,14 +126,20 @@ export default function AdminPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ defaultZoomLink: newZoomLink }),
+        body: JSON.stringify({ 
+          defaultZoomLink: newZoomLink,
+          ...meetingConfig
+        }),
       });
 
       if (response.status === 401) {
         router.push('/login');
         return;
       } else if (response.ok) {
-        setConfig({ defaultZoomLink: newZoomLink });
+        setConfig({ 
+          defaultZoomLink: newZoomLink,
+          ...meetingConfig
+        });
         alert('Configuration saved successfully!');
       } else {
         alert('Failed to save configuration');
@@ -200,6 +228,8 @@ export default function AdminPage() {
     router.push('/login');
   };
 
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -256,6 +286,74 @@ export default function AdminPage() {
                   This link will be used for all future meetings
                 </p>
               </div>
+
+              <div className="border-t border-white/20 pt-4">
+                <h3 className="text-lg font-medium text-white mb-4">Meeting Schedule</h3>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      First Meeting Day
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                      value={meetingConfig.meetingDay1}
+                      onChange={(e) => setMeetingConfig({...meetingConfig, meetingDay1: parseInt(e.target.value)})}
+                    >
+                      {dayNames.map((day, index) => (
+                        <option key={index} value={index} className="text-gray-900">{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      First Meeting Time
+                    </label>
+                    <input
+                      type="time"
+                      className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                      value={meetingConfig.meetingTime1}
+                      onChange={(e) => setMeetingConfig({...meetingConfig, meetingTime1: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      Second Meeting Day
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                      value={meetingConfig.meetingDay2}
+                      onChange={(e) => setMeetingConfig({...meetingConfig, meetingDay2: parseInt(e.target.value)})}
+                    >
+                      {dayNames.map((day, index) => (
+                        <option key={index} value={index} className="text-gray-900">{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      Second Meeting Time
+                    </label>
+                    <input
+                      type="time"
+                      className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                      value={meetingConfig.meetingTime2}
+                      onChange={(e) => setMeetingConfig({...meetingConfig, meetingTime2: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-500/20 rounded-lg">
+                  <p className="text-sm text-blue-200">
+                    Current Schedule: {dayNames[meetingConfig.meetingDay1]} {meetingConfig.meetingTime1} • {dayNames[meetingConfig.meetingDay2]} {meetingConfig.meetingTime2}
+                  </p>
+                </div>
+              </div>
               
               <button
                 onClick={handleSaveConfig}
@@ -272,10 +370,10 @@ export default function AdminPage() {
                 onClick={handleBackfill}
                 className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                Initialize/Update Meetings
+                Regenerate All Meetings
               </button>
               <div className="text-sm text-gray-300 mt-2 space-y-1">
-                <p>Creates Thursday 7pm & Saturday 1pm meetings since 2019</p>
+                <p>Recreates all meetings based on current schedule since 2019</p>
                 <p className="text-xs">🇮🇪 Automatically excludes Irish public holidays:</p>
                 <p className="text-xs">• New Year's Day, St. Patrick's Day, Easter Monday</p>
                 <p className="text-xs">• May/June/August/October Bank Holidays</p>

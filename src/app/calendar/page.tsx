@@ -22,29 +22,61 @@ interface User {
 }
 
 export default function CalendarPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [currentWeekMeetings, setCurrentWeekMeetings] = useState<Meeting[]>([]);
+  const [previousMeetings, setPreviousMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'upcoming' | 'previous'>('upcoming');
+  const [showPrevious, setShowPrevious] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [config, setConfig] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     fetchMeetings();
     checkAdminStatus();
-  }, [filter]);
+  }, []);
+
+  // Get current week's date range (Monday to Sunday)
+  const getCurrentWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+    
+    const monday = new Date(now.setDate(diff));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    return {
+      start: monday.toISOString().split('T')[0],
+      end: sunday.toISOString().split('T')[0]
+    };
+  };
 
   const fetchMeetings = async () => {
     try {
-      const response = await fetch(`/api/meetings?filter=${filter}`);
+      const response = await fetch('/api/meetings');
       if (response.status === 401) {
         router.push('/login');
         return;
       }
       if (response.ok) {
-        const data = await response.json();
-        setMeetings(data);
+        const allMeetings = await response.json();
+        
+        const weekRange = getCurrentWeekRange();
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Filter current week meetings (including past ones from this week)
+        const thisWeek = allMeetings.filter((meeting: Meeting) => 
+          meeting.date >= weekRange.start && meeting.date <= weekRange.end
+        );
+        
+        // Filter previous meetings (before this week)
+        const previous = allMeetings.filter((meeting: Meeting) => 
+          meeting.date < weekRange.start
+        ).sort((a: Meeting, b: Meeting) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        setCurrentWeekMeetings(thisWeek);
+        setPreviousMeetings(previous);
       }
     } catch (error) {
       console.error('Error fetching meetings:', error);
@@ -57,11 +89,41 @@ export default function CalendarPage() {
     try {
       const response = await fetch('/api/config');
       if (response.ok) {
+        const configData = await response.json();
         setIsAdmin(true);
+        setConfig(configData);
+      } else {
+        setIsAdmin(false);
+        // Try to get config for display purposes even for non-admin
+        try {
+          const meetingsResponse = await fetch('/api/meetings');
+          if (meetingsResponse.ok) {
+            // Set default config for display
+            setConfig({
+              meetingDay1: 4,
+              meetingDay2: 6,
+              meetingTime1: '19:00',
+              meetingTime2: '13:00'
+            });
+          }
+        } catch (err) {
+          // Fallback config
+          setConfig({
+            meetingDay1: 4,
+            meetingDay2: 6,
+            meetingTime1: '19:00',
+            meetingTime2: '13:00'
+          });
+        }
       }
     } catch (error) {
-      // User is not admin, which is fine
       setIsAdmin(false);
+      setConfig({
+        meetingDay1: 4,
+        meetingDay2: 6,
+        meetingTime1: '19:00',
+        meetingTime2: '13:00'
+      });
     }
   };
 
@@ -96,34 +158,13 @@ export default function CalendarPage() {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
-      year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     });
   };
 
-  const getDayOfWeek = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.getDay(); // 0 = Sunday, 4 = Thursday, 6 = Saturday
-  };
-
-  const getMeetingType = (dateString: string, timeString: string) => {
-    const dayOfWeek = getDayOfWeek(dateString);
-    const time = timeString || '';
-    
-    if (dayOfWeek === 4 && time === '19:00') {
-      return { type: 'Thursday Evening', icon: '🌆', color: 'from-blue-500 to-blue-600' };
-    } else if (dayOfWeek === 6 && time === '13:00') {
-      return { type: 'Saturday Afternoon', icon: '☀️', color: 'from-green-500 to-green-600' };
-    } else {
-      return { type: 'Team Meeting', icon: '📅', color: 'from-gray-500 to-gray-600' };
-    }
-  };
-
   const formatTime = (timeString: string) => {
-    if (!timeString) {
-      return 'Time TBD';
-    }
+    if (!timeString) return 'Time TBD';
     const [hours, minutes] = timeString.split(':');
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -131,51 +172,61 @@ export default function CalendarPage() {
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
-  const isUpcoming = (dateString: string, timeString: string) => {
-    if (!dateString) return false;
-    if (!timeString) {
-      // If no time specified, just check if date is today or future
-      const meetingDate = new Date(dateString);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return meetingDate >= today;
+  const getMeetingIcon = (dateString: string, timeString: string) => {
+    const date = new Date(dateString);
+    const dayOfWeek = date.getDay();
+    
+    if (config) {
+      if (dayOfWeek === config.meetingDay1 && timeString === config.meetingTime1) {
+        return config.meetingDay1 === 4 ? '🌆' : '📅'; // Thursday evening or generic
+      } else if (dayOfWeek === config.meetingDay2 && timeString === config.meetingTime2) {
+        return config.meetingDay2 === 6 ? '☀️' : '📅'; // Saturday afternoon or generic
+      }
     }
+    
+    return '📅';
+  };
+
+  const isPastMeeting = (dateString: string, timeString: string) => {
+    if (!timeString) return false;
     const meetingDateTime = new Date(`${dateString}T${timeString}`);
-    return meetingDateTime > new Date();
+    return meetingDateTime < new Date();
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <div className="text-xl text-white">Loading calendar...</div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-xl text-gray-900">Loading calendar...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
-      <header className="bg-white/10 backdrop-blur-md border-b border-white/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+    <div className="min-h-screen bg-white">
+      {/* Simple Header */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-white">Team Calendar</h1>
-              <p className="text-blue-200 text-sm mt-1">
-                📅 Regular Schedule: Thursdays 7:00 PM • Saturdays 1:00 PM
-              </p>
+              <h1 className="text-2xl font-bold text-gray-900">Team Calendar</h1>
+              {config && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Weekly Schedule: {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][config.meetingDay1]} {config.meetingTime1} • {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][config.meetingDay2]} {config.meetingTime2}
+                </p>
+              )}
             </div>
-            <div className="flex space-x-4">
+            <div className="flex space-x-3">
               {isAdmin && (
                 <button
                   onClick={() => router.push('/admin')}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
                 >
-                  Admin Panel
+                  Admin
                 </button>
               )}
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
               >
                 Logout
               </button>
@@ -184,137 +235,123 @@ export default function CalendarPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Schedule Info */}
-        <div className="mb-8 bg-gradient-to-r from-blue-600/20 to-green-600/20 backdrop-blur-md rounded-xl p-6 border border-white/20">
-          <h2 className="text-xl font-semibold text-white mb-4 text-center">
-            📋 Regular Meeting Schedule
-          </h2>
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-white/10 rounded-lg p-4 text-center">
-              <div className="text-2xl mb-2">🌆</div>
-              <h3 className="text-lg font-semibold text-white">Thursday Evenings</h3>
-              <p className="text-blue-200">7:00 PM</p>
-              <p className="text-sm text-gray-300 mt-1">Weekly team meeting</p>
-            </div>
-            <div className="bg-white/10 rounded-lg p-4 text-center">
-              <div className="text-2xl mb-2">☀️</div>
-              <h3 className="text-lg font-semibold text-white">Saturday Afternoons</h3>
-              <p className="text-green-200">1:00 PM</p>
-              <p className="text-sm text-gray-300 mt-1">Weekend team meeting</p>
-            </div>
-          </div>
-          <div className="bg-white/10 rounded-lg p-3 text-center">
-            <p className="text-sm text-gray-300">
-              🇮🇪 <strong>Note:</strong> Meetings are automatically cancelled on Irish public holidays
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              (New Year's, St. Patrick's Day, Easter Monday, Bank Holidays, Christmas, etc.)
-            </p>
-          </div>
-        </div>
-
-        {/* Filter Tabs */}
-        <div className="flex space-x-1 mb-8 bg-white/10 p-1 rounded-lg w-fit">
-          <button
-            onClick={() => setFilter('upcoming')}
-            className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-              filter === 'upcoming'
-                ? 'bg-white text-gray-900 shadow-lg'
-                : 'text-white hover:bg-white/20'
-            }`}
-          >
-            Upcoming Meetings
-          </button>
-          <button
-            onClick={() => setFilter('previous')}
-            className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-              filter === 'previous'
-                ? 'bg-white text-gray-900 shadow-lg'
-                : 'text-white hover:bg-white/20'
-            }`}
-          >
-            Previous Meetings
-          </button>
-        </div>
-
-        {/* Meetings Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {meetings.length === 0 ? (
-            <div className="col-span-full">
-              <div className="bg-white/10 backdrop-blur-md rounded-xl p-8 border border-white/20 text-center">
-                <p className="text-white text-lg">
-                  No {filter} meetings found
-                </p>
-              </div>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Current Week Section */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">This Week's Meetings</h2>
+          
+          {currentWeekMeetings.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No meetings scheduled for this week</p>
             </div>
           ) : (
-            meetings.map((meeting) => {
-              const meetingType = getMeetingType(meeting.date, meeting.time || '');
-              return (
+            <div className="space-y-3">
+              {currentWeekMeetings.map((meeting) => (
                 <div
                   key={meeting._id}
-                  className={`bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 shadow-xl transition-all duration-200 hover:shadow-2xl hover:bg-white/15 ${
-                    isUpcoming(meeting.date, meeting.time || '') ? 'ring-2 ring-blue-400/50' : ''
+                  className={`border rounded-lg p-4 hover:bg-gray-50 transition-colors ${
+                    isPastMeeting(meeting.date, meeting.time || '') 
+                      ? 'border-gray-200' 
+                      : 'border-blue-200 bg-blue-50'
                   }`}
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="text-lg">{meetingType.icon}</span>
-                        <span className={`bg-gradient-to-r ${meetingType.color} text-white text-xs px-2 py-1 rounded-full font-medium`}>
-                          {meetingType.type}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <span className="text-lg">
+                          {getMeetingIcon(meeting.date, meeting.time || '')}
                         </span>
+                        <h3 className="font-medium text-gray-900">
+                          {formatDate(meeting.date)} • {formatTime(meeting.time || '')}
+                        </h3>
+                        {!isPastMeeting(meeting.date, meeting.time || '') && (
+                          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                            Upcoming
+                          </span>
+                        )}
                       </div>
-                      <h3 className="text-lg font-semibold text-white mb-1">
-                        {meeting.title}
-                      </h3>
-                      <p className="text-blue-200 text-sm">
-                        {formatDate(meeting.date)}
-                      </p>
-                      <p className="text-blue-200 text-sm font-medium">
-                        {formatTime(meeting.time || '')}
-                      </p>
+                      
+                      {meeting.notes && (
+                        <p className="text-sm text-gray-700 mt-2 bg-gray-100 p-2 rounded">
+                          {meeting.notes}
+                        </p>
+                      )}
                     </div>
-                    {isUpcoming(meeting.date, meeting.time || '') && (
-                      <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                        Upcoming
-                      </span>
-                    )}
-                  </div>
-
-                  {meeting.notes && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-200 mb-2">Notes:</h4>
-                      <p className="text-gray-300 text-sm bg-white/10 p-3 rounded-lg">
-                        {meeting.notes}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {meeting.zoomLink && meeting.zoomLink !== 'https://zoom.us/placeholder' && meeting.zoomLink !== '' && (
-                      <a
-                        href={meeting.zoomLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
-                      >
-                        <span>🔗</span>
-                        <span>Join Meeting</span>
-                      </a>
-                    )}
                     
-                    <button
-                      onClick={() => setEditingMeeting(meeting)}
-                      className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                    >
-                      Edit Notes
-                    </button>
+                    <div className="flex space-x-2 ml-4">
+                      {meeting.zoomLink && meeting.zoomLink !== '' && (
+                        <a
+                          href={meeting.zoomLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 transition-colors"
+                        >
+                          Join
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setEditingMeeting(meeting)}
+                        className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        {isAdmin ? 'Edit' : 'View Notes'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              );
-            })
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Previous Meetings Toggle */}
+        <div className="border-t border-gray-200 pt-6">
+          <button
+            onClick={() => setShowPrevious(!showPrevious)}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <span>{showPrevious ? '↑' : '↓'}</span>
+            <span>Previous Meetings ({previousMeetings.length})</span>
+          </button>
+          
+          {showPrevious && (
+            <div className="mt-4 space-y-3 max-h-96 overflow-y-auto">
+              {previousMeetings.length === 0 ? (
+                <p className="text-gray-500 text-sm">No previous meetings found</p>
+              ) : (
+                previousMeetings.map((meeting) => (
+                  <div
+                    key={meeting._id}
+                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-lg">
+                            {getMeetingIcon(meeting.date, meeting.time || '')}
+                          </span>
+                          <h3 className="font-medium text-gray-900">
+                            {formatDate(meeting.date)} • {formatTime(meeting.time || '')}
+                          </h3>
+                        </div>
+                        
+                        {meeting.notes && (
+                          <p className="text-sm text-gray-700 mt-2 bg-gray-100 p-2 rounded">
+                            {meeting.notes}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <button
+                        onClick={() => setEditingMeeting(meeting)}
+                        className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors ml-4"
+                      >
+                        {isAdmin ? 'View/Edit' : 'View Notes'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -324,12 +361,17 @@ export default function CalendarPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4 text-gray-900">
-              Edit Meeting: {editingMeeting.title}
+              {isAdmin ? 'Edit Meeting' : 'Meeting Details'}
             </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {formatDate(editingMeeting.date)} • {formatTime(editingMeeting.time || '')}
+            </p>
             
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (!isAdmin) return;
+                
                 const formData = new FormData(e.currentTarget);
                 const notes = formData.get('notes') as string;
                 const time = formData.get('time') as string;
@@ -344,19 +386,20 @@ export default function CalendarPage() {
               className="space-y-4"
             >
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Meeting Time
                 </label>
                 <input
                   type="time"
                   name="time"
                   defaultValue={editingMeeting.time || '13:00'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Zoom Link
                 </label>
                 <input
@@ -364,12 +407,13 @@ export default function CalendarPage() {
                   name="zoomLink"
                   defaultValue={editingMeeting.zoomLink || ''}
                   placeholder="https://zoom.us/j/1234567890"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Meeting Notes
                 </label>
                 <textarea
@@ -377,24 +421,27 @@ export default function CalendarPage() {
                   rows={4}
                   defaultValue={editingMeeting.notes || ''}
                   placeholder="Add meeting notes, agenda, or any important information..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               
-              <div className="flex space-x-3">
+              <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setEditingMeeting(null)}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                  className="flex-1 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  Close
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-                >
-                  Save Changes
-                </button>
+                {isAdmin && (
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                )}
               </div>
             </form>
           </div>

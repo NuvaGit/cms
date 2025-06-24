@@ -84,39 +84,41 @@ function isIrishHoliday(date: Date): boolean {
   );
 }
 
-function getNextDayOfWeek(date: Date, targetDay: number): Date {
-  const result = new Date(date);
-  const dayOfWeek = result.getDay();
-  const daysUntilTarget = (targetDay - dayOfWeek + 7) % 7;
-  if (daysUntilTarget === 0 && result.getTime() <= date.getTime()) {
-    result.setDate(result.getDate() + 7);
-  } else {
-    result.setDate(result.getDate() + daysUntilTarget);
-  }
-  return result;
-}
-
-function getAllMeetingsSince2019() {
+function getAllMeetingsSince2019(config: any) {
   const meetings = [];
   const startDate = new Date('2019-01-01');
   const endDate = new Date();
   endDate.setFullYear(endDate.getFullYear() + 1); // Include next year
   
+  // Get meeting days from config (default to Thursday=4, Saturday=6)
+  const meetingDay1 = config.meetingDay1 || 4; // Thursday
+  const meetingDay2 = config.meetingDay2 || 6; // Saturday
+  const meetingTime1 = config.meetingTime1 || '19:00'; // 7 PM
+  const meetingTime2 = config.meetingTime2 || '13:00'; // 1 PM
+  
+  // Generate meetings for first day (default Thursday)
   let currentDate = new Date(startDate);
   
-  // Find first Thursday and Saturday from start date
-  let nextThursday = getNextDayOfWeek(currentDate, 4); // Thursday = 4
-  let nextSaturday = getNextDayOfWeek(currentDate, 6); // Saturday = 6
+  // Find the first occurrence of meetingDay1 on or after the start date
+  while (currentDate.getDay() !== meetingDay1) {
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
   
-  // Generate all meetings from 2019 to next year
-  while (nextThursday <= endDate || nextSaturday <= endDate) {
-    // Add Thursday 7pm meeting (only if not a holiday)
-    if (nextThursday <= endDate && !isIrishHoliday(nextThursday)) {
+  // Generate all meetings for day 1
+  while (currentDate <= endDate) {
+    if (!isIrishHoliday(currentDate)) {
+      // Use UTC date to avoid timezone issues
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+      
       meetings.push({
-        date: nextThursday.toISOString().split('T')[0],
-        time: '19:00',
-        title: `Team Meeting - ${nextThursday.toLocaleDateString('en-US', { 
-          weekday: 'long', 
+        date: dateStr,
+        time: meetingTime1,
+        title: `Team Meeting - ${dayName}, ${currentDate.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric', 
           year: 'numeric' 
@@ -127,15 +129,33 @@ function getAllMeetingsSince2019() {
         updatedAt: new Date()
       });
     }
-    nextThursday.setDate(nextThursday.getDate() + 7);
-    
-    // Add Saturday 1pm meeting (only if not a holiday)
-    if (nextSaturday <= endDate && !isIrishHoliday(nextSaturday)) {
+    // Move to next week
+    currentDate.setDate(currentDate.getDate() + 7);
+  }
+  
+  // Reset for second day meetings (default Saturday)
+  currentDate = new Date(startDate);
+  
+  // Find the first occurrence of meetingDay2 on or after the start date
+  while (currentDate.getDay() !== meetingDay2) {
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  // Generate all meetings for day 2
+  while (currentDate <= endDate) {
+    if (!isIrishHoliday(currentDate)) {
+      // Use UTC date to avoid timezone issues
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+      
       meetings.push({
-        date: nextSaturday.toISOString().split('T')[0],
-        time: '13:00',
-        title: `Weekend Team Meeting - ${nextSaturday.toLocaleDateString('en-US', { 
-          weekday: 'long', 
+        date: dateStr,
+        time: meetingTime2,
+        title: `${dayName} Team Meeting - ${currentDate.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric', 
           year: 'numeric' 
@@ -146,7 +166,8 @@ function getAllMeetingsSince2019() {
         updatedAt: new Date()
       });
     }
-    nextSaturday.setDate(nextSaturday.getDate() + 7);
+    // Move to next week
+    currentDate.setDate(currentDate.getDate() + 7);
   }
   
   return meetings.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -167,53 +188,63 @@ export async function POST(request: NextRequest) {
     if (!config) {
       config = {
         defaultZoomLink: 'https://zoom.us/j/placeholder123456',
+        meetingDay1: 4, // Thursday (0=Sunday, 1=Monday, etc.)
+        meetingDay2: 6, // Saturday
+        meetingTime1: '19:00', // 7 PM
+        meetingTime2: '13:00', // 1 PM
         updatedAt: new Date()
       };
       await db.collection('config').insertOne(config);
     }
     
+    // Ensure config has meeting days (for existing configs)
+    if (config.meetingDay1 === undefined) {
+      await db.collection('config').updateOne(
+        {},
+        { 
+          $set: { 
+            meetingDay1: 4, // Thursday
+            meetingDay2: 6, // Saturday
+            meetingTime1: '19:00',
+            meetingTime2: '13:00',
+            updatedAt: new Date()
+          }
+        }
+      );
+      config.meetingDay1 = 4;
+      config.meetingDay2 = 6;
+      config.meetingTime1 = '19:00';
+      config.meetingTime2 = '13:00';
+    }
+    
+    // Clear existing meetings first to avoid duplicates and ensure correct schedule
+    await db.collection('meetings').deleteMany({});
+    
     // Generate all meetings since 2019 (excluding Irish holidays)
-    const meetings = getAllMeetingsSince2019();
+    const meetings = getAllMeetingsSince2019(config);
     
     // Add zoom links to all meetings
     meetings.forEach(meeting => {
       meeting.zoomLink = config.defaultZoomLink;
     });
     
-    // Check if meetings already exist to avoid duplicates
-    const existingMeetings = await db.collection('meetings').find({}).toArray();
+    // Insert all meetings
+    await db.collection('meetings').insertMany(meetings);
     
-    if (existingMeetings.length === 0) {
-      await db.collection('meetings').insertMany(meetings);
-      
-      // Count holidays excluded
-      const allPossibleMeetings = getAllMeetingsWithoutHolidayFilter();
-      const holidaysExcluded = allPossibleMeetings.length - meetings.length;
-      
-      return NextResponse.json({ 
-        message: `Created ${meetings.length} meetings (Thu 7pm & Sat 1pm since 2019)`,
-        holidaysExcluded: holidaysExcluded,
-        note: 'Irish public holidays automatically excluded'
-      });
-    } else {
-      // Add any missing meetings
-      const existingDates = new Set(existingMeetings.map(m => `${m.date}-${m.time}`));
-      const newMeetings = meetings.filter(m => !existingDates.has(`${m.date}-${m.time}`));
-      
-      if (newMeetings.length > 0) {
-        await db.collection('meetings').insertMany(newMeetings);
-        return NextResponse.json({ 
-          message: `Added ${newMeetings.length} new meetings`,
-          note: 'Irish public holidays automatically excluded'
-        });
-      } else {
-        return NextResponse.json({ 
-          message: 'All meetings already exist',
-          total: meetings.length,
-          note: 'Irish public holidays excluded from schedule'
-        });
-      }
-    }
+    // Count holidays excluded
+    const allPossibleMeetings = getAllMeetingsWithoutHolidayFilter(config);
+    const holidaysExcluded = allPossibleMeetings.length - meetings.length;
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const day1Name = dayNames[config.meetingDay1];
+    const day2Name = dayNames[config.meetingDay2];
+    
+    return NextResponse.json({ 
+      message: `Created ${meetings.length} meetings (${day1Name} ${config.meetingTime1} & ${day2Name} ${config.meetingTime2} since 2019)`,
+      holidaysExcluded: holidaysExcluded,
+      note: 'Irish public holidays automatically excluded',
+      schedule: `Meetings scheduled for every ${day1Name} ${config.meetingTime1} and ${day2Name} ${config.meetingTime2}`
+    });
   } catch (error) {
     console.error('Backfill error:', error);
     return NextResponse.json({ error: 'Failed to backfill meetings' }, { status: 500 });
@@ -221,25 +252,41 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function for counting total meetings without holiday filter
-function getAllMeetingsWithoutHolidayFilter() {
+function getAllMeetingsWithoutHolidayFilter(config: any) {
   const meetings = [];
   const startDate = new Date('2019-01-01');
   const endDate = new Date();
   endDate.setFullYear(endDate.getFullYear() + 1);
   
-  let currentDate = new Date(startDate);
-  let nextThursday = getNextDayOfWeek(currentDate, 4);
-  let nextSaturday = getNextDayOfWeek(currentDate, 6);
+  const meetingDay1 = config.meetingDay1 || 4; // Thursday
+  const meetingDay2 = config.meetingDay2 || 6; // Saturday
   
-  while (nextThursday <= endDate || nextSaturday <= endDate) {
-    if (nextThursday <= endDate) {
-      meetings.push({ date: nextThursday.toISOString().split('T')[0], time: '19:00' });
-      nextThursday.setDate(nextThursday.getDate() + 7);
-    }
-    if (nextSaturday <= endDate) {
-      meetings.push({ date: nextSaturday.toISOString().split('T')[0], time: '13:00' });
-      nextSaturday.setDate(nextSaturday.getDate() + 7);
-    }
+  // Count all meetings for day 1
+  let currentDate = new Date(startDate);
+  while (currentDate.getDay() !== meetingDay1) {
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  while (currentDate <= endDate) {
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    meetings.push({ date: dateStr, time: config.meetingTime1 || '19:00' });
+    currentDate.setDate(currentDate.getDate() + 7);
+  }
+  
+  // Count all meetings for day 2
+  currentDate = new Date(startDate);
+  while (currentDate.getDay() !== meetingDay2) {
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  while (currentDate <= endDate) {
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    meetings.push({ date: dateStr, time: config.meetingTime2 || '13:00' });
+    currentDate.setDate(currentDate.getDate() + 7);
   }
   
   return meetings;
