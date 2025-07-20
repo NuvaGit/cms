@@ -38,6 +38,21 @@ export default function AdminPage() {
   });
   const router = useRouter();
 
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await fetch('/api/users');
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      } else if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  }, [router]);
+
   const checkAuthAndLoadData = useCallback(async () => {
     try {
       // First check if user is authenticated by trying to fetch config
@@ -82,27 +97,12 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, fetchUsers]);
 
   useEffect(() => {
     // Check authentication first, then load data
     checkAuthAndLoadData();
   }, [checkAuthAndLoadData]);
-
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch('/api/users');
-      if (response.status === 401) {
-        router.push('/login');
-        return;
-      } else if (response.ok) {
-        const data = await response.json();
-        setUsers(data);
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
 
   const handleSaveConfig = async () => {
     setSaving(true);
