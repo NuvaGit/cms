@@ -3,6 +3,15 @@ import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
+interface ConfigData {
+  defaultZoomLink: string;
+  meetingDay1: number;
+  meetingDay2: number;
+  meetingTime1: string;
+  meetingTime2: string;
+  updatedAt: Date;
+}
+
 interface ConfigUpdateData {
   defaultZoomLink?: string;
   meetingDay1?: number;
@@ -77,7 +86,7 @@ export async function GET(request: NextRequest) {
     
     let config = await db.collection('config').findOne({});
     if (!config) {
-      config = {
+      const defaultConfig: ConfigData = {
         defaultZoomLink: 'https://zoom.us/j/placeholder123456',
         meetingDay1: 4, // Thursday
         meetingDay2: 6, // Saturday
@@ -85,27 +94,27 @@ export async function GET(request: NextRequest) {
         meetingTime2: '13:00',
         updatedAt: new Date()
       };
-      await db.collection('config').insertOne(config);
+      await db.collection('config').insertOne(defaultConfig);
+      return NextResponse.json(defaultConfig);
     }
     
     // Ensure config has meeting days (for existing configs)
     if (config.meetingDay1 === undefined) {
+      const updateData: ConfigUpdateData = { 
+        meetingDay1: 4,
+        meetingDay2: 6,
+        meetingTime1: '19:00',
+        meetingTime2: '13:00',
+        updatedAt: new Date()
+      };
+      
       await db.collection('config').updateOne(
         {},
-        { 
-          $set: { 
-            meetingDay1: 4,
-            meetingDay2: 6,
-            meetingTime1: '19:00',
-            meetingTime2: '13:00',
-            updatedAt: new Date()
-          }
-        }
+        { $set: updateData }
       );
-      config.meetingDay1 = 4;
-      config.meetingDay2 = 6;
-      config.meetingTime1 = '19:00';
-      config.meetingTime2 = '13:00';
+      
+      // Update the config object with the new values
+      config = { ...config, ...updateData };
     }
     
     return NextResponse.json(config);
