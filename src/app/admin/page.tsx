@@ -194,21 +194,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleBackfill = async () => {
-    try {
-      const response = await fetch('/api/backfill', { method: 'POST' });
-      if (response.status === 401) {
-        router.push('/login');
-        return;
-      }
-      const data = await response.json();
-      alert(data.message);
-    } catch (_error) {
-      console.error('Failed to initialize meetings:', _error);
-      alert('Failed to initialize meetings');
-    }
-  };
-
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
@@ -348,24 +333,6 @@ export default function AdminPage() {
               >
                 {saving ? 'Saving...' : 'Save Configuration'}
               </button>
-            </div>
-
-            <div className="mt-8">
-              <h3 className="text-lg font-medium mb-4 text-white">System Actions</h3>
-              
-              <button
-                onClick={handleBackfill}
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                Regenerate All Meetings
-              </button>
-              <div className="text-sm text-gray-300 mt-2 space-y-1">
-                <p>Recreates all meetings based on current schedule since 2019</p>
-                <p className="text-xs">🇮🇪 Automatically excludes Irish public holidays:</p>
-                <p className="text-xs">• New Year&apos;s Day, St. Patrick&apos;s Day, Easter Monday</p>
-                <p className="text-xs">• May/June/August/October Bank Holidays</p>
-                <p className="text-xs">• Christmas Day, St. Stephen&apos;s Day</p>
-              </div>
             </div>
           </div>
 

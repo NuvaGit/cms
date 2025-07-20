@@ -18,7 +18,7 @@ async function verifyAuth(request: NextRequest) {
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await verifyAuth(request);
@@ -26,7 +26,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const params = await context.params;
+    const resolvedParams = await params;
     const { notes, time, zoomLink } = await request.json();
     const client = await clientPromise;
     const db = client.db('calendarcms');
@@ -37,7 +37,7 @@ export async function PUT(
     if (zoomLink !== undefined) updateFields.zoomLink = zoomLink;
 
     const result = await db.collection('meetings').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       { $set: updateFields }
     );
 
