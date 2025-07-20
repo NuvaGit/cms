@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Meeting {
@@ -14,10 +14,12 @@ interface Meeting {
   updatedAt: string;
 }
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
+interface Config {
+  defaultZoomLink?: string;
+  meetingDay1: number;
+  meetingDay2: number;
+  meetingTime1: string;
+  meetingTime2: string;
 }
 
 export default function CalendarPage() {
@@ -27,13 +29,8 @@ export default function CalendarPage() {
   const [showPrevious, setShowPrevious] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<Config | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    fetchMeetings();
-    checkAdminStatus();
-  }, []);
 
   const getCurrentWeekRange = () => {
     const now = new Date();
@@ -50,7 +47,7 @@ export default function CalendarPage() {
     };
   };
 
-  const fetchMeetings = async () => {
+  const fetchMeetings = useCallback(async () => {
     try {
       const response = await fetch('/api/meetings');
       if (response.status === 401) {
@@ -78,9 +75,9 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
-  const checkAdminStatus = async () => {
+  const checkAdminStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/config');
       if (response.ok) {
@@ -99,7 +96,8 @@ export default function CalendarPage() {
               meetingTime2: '13:00'
             });
           }
-        } catch (err) {
+        } catch (_err) {
+          console.error('Error fetching meetings for config:', _err);
           setConfig({
             meetingDay1: 4,
             meetingDay2: 6,
@@ -109,6 +107,7 @@ export default function CalendarPage() {
         }
       }
     } catch (error) {
+      console.error('Error checking admin status:', error);
       setIsAdmin(false);
       setConfig({
         meetingDay1: 4,
@@ -117,7 +116,12 @@ export default function CalendarPage() {
         meetingTime2: '13:00'
       });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMeetings();
+    checkAdminStatus();
+  }, [fetchMeetings, checkAdminStatus]);
 
   const handleUpdateMeeting = async (meetingId: string, updates: Partial<Meeting>) => {
     try {
@@ -137,6 +141,7 @@ export default function CalendarPage() {
         alert('Failed to update meeting');
       }
     } catch (error) {
+      console.error('Error updating meeting:', error);
       alert('Error updating meeting');
     }
   };
@@ -323,7 +328,7 @@ export default function CalendarPage() {
           {/* Current Week Section */}
           <div className="mb-16">
             <div className="flex items-center space-x-4 mb-8">
-              <h2 className="text-3xl font-bold text-white">This Week's Meetings</h2>
+              <h2 className="text-3xl font-bold text-white">This Week&apos;s Meetings</h2>
               <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
               <div className="bg-gradient-to-r from-violet-500 to-indigo-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
                 {currentWeekMeetings.length} meetings

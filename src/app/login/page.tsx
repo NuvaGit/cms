@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -9,7 +8,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +59,7 @@ export default function LoginPage() {
             Team Calendar
           </h2>
           <p className="text-gray-600">
-            Sign in to access your team's meeting schedule
+            Sign in to access your team&apos;s meeting schedule
           </p>
         </div>
 

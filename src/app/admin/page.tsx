@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
@@ -19,13 +19,6 @@ interface Config {
 }
 
 export default function AdminPage() {
-  const [config, setConfig] = useState<Config>({ 
-    defaultZoomLink: '',
-    meetingDay1: 4, // Thursday
-    meetingDay2: 6, // Saturday  
-    meetingTime1: '19:00',
-    meetingTime2: '13:00'
-  });
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,7 +30,6 @@ export default function AdminPage() {
     meetingTime2: '13:00'
   });
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -46,12 +38,7 @@ export default function AdminPage() {
   });
   const router = useRouter();
 
-  useEffect(() => {
-    // Check authentication first, then load data
-    checkAuthAndLoadData();
-  }, []);
-
-  const checkAuthAndLoadData = async () => {
+  const checkAuthAndLoadData = useCallback(async () => {
     try {
       // First check if user is authenticated by trying to fetch config
       const response = await fetch('/api/config');
@@ -69,8 +56,7 @@ export default function AdminPage() {
         return;
       } else if (response.ok) {
         // User is authenticated and is admin, load the data
-        const configData = await response.json();
-        setConfig(configData);
+        const configData: Config = await response.json();
         setNewZoomLink(configData.defaultZoomLink);
         setMeetingConfig({
           meetingDay1: configData.meetingDay1 || 4,
@@ -96,7 +82,12 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    // Check authentication first, then load data
+    checkAuthAndLoadData();
+  }, [checkAuthAndLoadData]);
 
   const fetchUsers = async () => {
     try {
@@ -107,11 +98,6 @@ export default function AdminPage() {
       } else if (response.ok) {
         const data = await response.json();
         setUsers(data);
-        
-        // Find current user from the list (you could also fetch this separately)
-        // For now, we'll use the first admin as a fallback
-        const adminUser = data.find((u: User) => u.role === 'admin');
-        setCurrentUser(adminUser);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -136,15 +122,12 @@ export default function AdminPage() {
         router.push('/login');
         return;
       } else if (response.ok) {
-        setConfig({ 
-          defaultZoomLink: newZoomLink,
-          ...meetingConfig
-        });
         alert('Configuration saved successfully!');
       } else {
         alert('Failed to save configuration');
       }
-    } catch (error) {
+    } catch (_error) {
+      console.error('Error saving configuration:', _error);
       alert('Error saving configuration');
     } finally {
       setSaving(false);
@@ -175,7 +158,8 @@ export default function AdminPage() {
         const data = await response.json();
         alert(data.error || 'Failed to create user');
       }
-    } catch (error) {
+    } catch (_error) {
+      console.error('Error creating user:', _error);
       alert('Error creating user');
     }
   };
@@ -204,7 +188,8 @@ export default function AdminPage() {
         const data = await response.json();
         alert(data.error || 'Failed to delete user');
       }
-    } catch (error) {
+    } catch (_error) {
+      console.error('Error deleting user:', _error);
       alert('Error deleting user');
     }
   };
@@ -218,7 +203,8 @@ export default function AdminPage() {
       }
       const data = await response.json();
       alert(data.message);
-    } catch (error) {
+    } catch (_error) {
+      console.error('Failed to initialize meetings:', _error);
       alert('Failed to initialize meetings');
     }
   };
@@ -376,9 +362,9 @@ export default function AdminPage() {
               <div className="text-sm text-gray-300 mt-2 space-y-1">
                 <p>Recreates all meetings based on current schedule since 2019</p>
                 <p className="text-xs">🇮🇪 Automatically excludes Irish public holidays:</p>
-                <p className="text-xs">• New Year's Day, St. Patrick's Day, Easter Monday</p>
+                <p className="text-xs">• New Year&apos;s Day, St. Patrick&apos;s Day, Easter Monday</p>
                 <p className="text-xs">• May/June/August/October Bank Holidays</p>
-                <p className="text-xs">• Christmas Day, St. Stephen's Day</p>
+                <p className="text-xs">• Christmas Day, St. Stephen&apos;s Day</p>
               </div>
             </div>
           </div>

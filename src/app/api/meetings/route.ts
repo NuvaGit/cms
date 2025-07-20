@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
 
 async function verifyAuth(request: NextRequest) {
   const token = request.cookies.get('auth-token')?.value;
@@ -69,6 +68,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(meetings);
   } catch (error) {
+    console.error('❌ Failed to fetch meetings:', error);
     return NextResponse.json({ error: 'Failed to fetch meetings' }, { status: 500 });
   }
 }

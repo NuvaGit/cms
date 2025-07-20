@@ -3,6 +3,15 @@ import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
+interface ConfigUpdateData {
+  defaultZoomLink?: string;
+  meetingDay1?: number;
+  meetingDay2?: number;
+  meetingTime1?: string;
+  meetingTime2?: string;
+  updatedAt: Date;
+}
+
 async function verifyAuth(request: NextRequest) {
   const token = request.cookies.get('auth-token')?.value;
   if (!token) {
@@ -25,8 +34,8 @@ async function isAdmin(userId: string) {
     let objectId;
     try {
       objectId = new ObjectId(userId);
-    } catch (err) {
-      console.error('❌ Invalid ObjectId format:', userId);
+    } catch (_err) {
+      console.error('❌ Invalid ObjectId format:', userId, _err);
       return false;
     }
     
@@ -124,7 +133,7 @@ export async function PUT(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db('calendarcms');
     
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: ConfigUpdateData = { updatedAt: new Date() };
     
     if (defaultZoomLink !== undefined) updateData.defaultZoomLink = defaultZoomLink;
     if (meetingDay1 !== undefined) updateData.meetingDay1 = meetingDay1;
@@ -132,7 +141,7 @@ export async function PUT(request: NextRequest) {
     if (meetingTime1 !== undefined) updateData.meetingTime1 = meetingTime1;
     if (meetingTime2 !== undefined) updateData.meetingTime2 = meetingTime2;
     
-    const result = await db.collection('config').updateOne(
+    await db.collection('config').updateOne(
       {},
       { $set: updateData },
       { upsert: true }
@@ -149,6 +158,7 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json({ message: 'Configuration updated successfully' });
   } catch (error) {
+    console.error('❌ Failed to update config:', error);
     return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });
   }
 }
