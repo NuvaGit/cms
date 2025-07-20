@@ -18,7 +18,7 @@ async function verifyAuth(request: NextRequest) {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await verifyAuth(request);
@@ -26,6 +26,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const params = await context.params;
     const { notes, time, zoomLink } = await request.json();
     const client = await clientPromise;
     const db = client.db('calendarcms');
